@@ -1,5 +1,5 @@
 from termcolor import colored
-import time
+
 import matplotlib.pyplot as plt
 import requests
 import pandas as pd
@@ -9,8 +9,6 @@ from datetime import datetime
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-import robin_stocks as r
-
 
 os.system('color')
 
@@ -18,14 +16,7 @@ f = open("api.key", "r")
 api_key = f.read()
 f.close()
 
-f = open("rh.key", "r")
-rh_username = f.readline()
-rh_password = f.readline()
-f.close()
-
-login = r.login(rh_username, rh_password)
-
-state = {'last_action': None, 'last_price':0, 'profit':0, 'datetime': None}
+state = {'last_action': None, 'last_price':0, 'profit':0, 'datetime': None, 'consec_mv_down': 0}
 
 def fetch_price_time():
     url='https://api.polygon.io/v1/last/crypto/DOGE/USD?&apiKey={api_key}'.format(api_key=api_key)
@@ -64,9 +55,15 @@ def fetch_ochl():
 
 def process():
     data = fetchData()
+    last_open = data['o'].item()
     last_close = data['c'].item()
     last_upper = data['upper'].item()
     last_lower = data['lower'].item()
+
+    if last_close < last_open:
+        state['consec_mv_down'] += 1
+    else:
+        state['consec_mv_down'] = 0
 
     last_price_time = fetch_price_time()
     last_price = last_price_time['price']
@@ -77,15 +74,12 @@ def process():
         state['last_action'] = 'buy'
         state['datetime'] = last_datetime
         print(colored('[{datetime}] BUY DOGE @ {price:.5f}'.format(price=last_price, datetime=last_datetime.strftime("%Y-%m-%d %H:%M:%S")), 'green'))
-        response = r.order_buy_crypto_by_quantity('DOGE', 2000)
-        print (response)
-    elif (last_close < last_lower and state['last_action'] == 'hold'):
+    elif (last_close < last_lower and state['last_action'] == 'hold') or state['consec_mv_down'] >= 3:
+        state['consec_mv_down'] = 0
         state['last_action'] = 'sell'
         state['profit'] += last_price - state['last_price']
         state['last_price'] = 0
         print(colored('[{datetime}] SELL DOGE @ {price:.5f} | Session Profit: {session_profit:.5f}'.format(price=last_price, session_profit=state['profit'], datetime=last_datetime.strftime("%Y-%m-%d %H:%M:%S")), 'red'))
-        response = r.order_sell_crypto_by_quantity('DOGE', 2000)
-        print (response)
     else:
         if (state['last_action'] == 'buy'):
             state['last_action'] = 'hold'
