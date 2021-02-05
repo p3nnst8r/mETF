@@ -1,0 +1,5 @@
+robin-stocks
+APScheduler
+matplotlib
+pandas
+numpy
